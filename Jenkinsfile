@@ -21,7 +21,6 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo '📥 Checking out source code...'
-                // checkout scm   // uncomment if you actually want to clone repo code
             }
         }
         
@@ -53,9 +52,7 @@ pipeline {
             steps {
                 script {
                     echo "📥 Pulling image from ECR..."
-                    sh """
-                        docker pull ${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG}
-                    """
+                    sh "docker pull ${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG}"
                 }
             }
         }
@@ -79,55 +76,25 @@ pipeline {
                     
                     writeFile file: 'deploy.sh', text: """#!/bin/bash
 set -e
-
 CONTAINER_NAME="${params.CONTAINER_NAME}"
 IMAGE_URI="${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG}"
 HOST_PORT="${params.HOST_PORT}"
 CONTAINER_PORT="${params.CONTAINER_PORT}"
 AWS_REGION="${AWS_DEFAULT_REGION}"
 
-echo "Starting deployment process..."
-
-# Authenticate with ECR
 aws ecr get-login-password --region \$AWS_REGION | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-# Stop & remove existing container
 docker stop \$CONTAINER_NAME || true
 docker rm \$CONTAINER_NAME || true
-
-# Clean up old images
-docker images ${params.ECR_REPOSITORY_URI} --format "table {{.Repository}}:{{.Tag}}" | grep -v \$IMAGE_URI | grep -v "REPOSITORY:TAG" | xargs -r docker rmi || true
-
-# Pull latest image
 docker pull \$IMAGE_URI
-
-# Run new container
-docker run -d \\
-    --name \$CONTAINER_NAME \\
-    --restart unless-stopped \\
-    -p \$HOST_PORT:\$CONTAINER_PORT \\
-    \$IMAGE_URI
-
-sleep 5
-if docker ps | grep -q \$CONTAINER_NAME; then
-    echo "✅ Container \$CONTAINER_NAME is running"
-else
-    echo "❌ Failed to start container"
-    docker logs \$CONTAINER_NAME
-    exit 1
-fi
-
-echo "🚀 Deployment completed!"
+docker run -d --name \$CONTAINER_NAME --restart unless-stopped -p \$HOST_PORT:\$CONTAINER_PORT \$IMAGE_URI
 """
-                    
+
                     writeFile file: 'rollback.sh', text: """#!/bin/bash
 set -e
 CONTAINER_NAME="${params.CONTAINER_NAME}"
-
-echo "Starting rollback..."
 docker stop \$CONTAINER_NAME || true
 docker rm \$CONTAINER_NAME || true
-echo "Rollback complete. Please redeploy previous version manually."
+echo "Rollback complete"
 """
                 }
             }
@@ -177,10 +144,7 @@ echo "Rollback complete. Please redeploy previous version manually."
             steps {
                 script {
                     echo '🧹 Cleaning up local workspace...'
-                    sh '''
-                        rm -f deploy.sh rollback.sh
-                        docker system prune -f --volumes || true
-                    '''
+                    sh 'rm -f deploy.sh rollback.sh || true'
                 }
             }
         }
@@ -196,9 +160,7 @@ echo "Rollback complete. Please redeploy previous version manually."
                 try {
                     sshagent(credentials: ['ec2-ssh-key']) {
                         sh """
-                            ssh -o StrictHostKeyChecking=no ${params.EC2_USER}@${params.EC2_HOST} '
-                                sudo /tmp/rollback.sh
-                            '
+                            ssh -o StrictHostKeyChecking=no ${params.EC2_USER}@${params.EC2_HOST} 'sudo /tmp/rollback.sh'
                         """
                     }
                 } catch (Exception e) {
@@ -206,4 +168,9 @@ echo "Rollback complete. Please redeploy previous version manually."
                 }
             }
         }
-        alway
+        always {
+            echo '🧹 Cleaning up Jenkins workspace...'
+            cleanWs()
+        }
+    }
+}
