@@ -48,15 +48,15 @@ pipeline {
                         aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \\
                           | sudo docker login --username AWS --password-stdin ${ECR_URI}
 
-                        echo "📦 Pulling image: ${ECR_URI}:${IMAGE_TAG}"
-                        sudo docker pull ${ECR_URI}:${IMAGE_TAG}
+                        echo "📦 Pulling image: ${ECR_URI}:${params.IMAGE_TAG}"
+                        sudo docker pull ${ECR_URI}:${params.IMAGE_TAG}
 
                         echo "🛑 Stopping old container (if running)..."
                         sudo docker stop ${REPO_NAME} || true
                         sudo docker rm ${REPO_NAME} || true
 
                         echo "🚀 Running new container..."
-                        sudo docker run -d --name ${REPO_NAME} -p 80:80 ${ECR_URI}:${IMAGE_TAG}
+                        sudo docker run -d --name ${REPO_NAME} -p 80:80 ${ECR_URI}:${params.IMAGE_TAG}
                     """
                 }
             }
