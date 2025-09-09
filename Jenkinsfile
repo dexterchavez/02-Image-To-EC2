@@ -1,19 +1,21 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'ECR Image Tag to deploy')
+    }
+
     environment {
         AWS_DEFAULT_REGION = "ap-southeast-1"
         REPO_NAME   = "petmed"
         ACCOUNT_ID  = "368166794913"
-        IMAGE_TAG   = "${BUILD_NUMBER}"   // Or set to "latest" if you prefer
         ECR_URI     = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
-        CONTAINER_NAME = "petmed-container"
     }
 
     stages {
         stage('Login to AWS ECR') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                                   credentialsId: 'AWS-Credentials']]) {
                     sh '''
                         echo "🔑 Logging in to AWS ECR..."
@@ -28,8 +30,8 @@ pipeline {
         stage('Pull Image from ECR') {
             steps {
                 sh '''
-                    echo "📥 Pulling image $ECR_URI:$IMAGE_TAG ..."
-                    docker pull $ECR_URI:$IMAGE_TAG
+                    echo "📥 Pulling image $ECR_URI:${IMAGE_TAG} ..."
+                    docker pull $ECR_URI:${IMAGE_TAG}
                 '''
             }
         }
@@ -37,11 +39,9 @@ pipeline {
         stage('Run Docker Container') {
             steps {
                 sh '''
-                    echo "🛑 Stopping old container (if exists)..."
-                    docker rm -f $CONTAINER_NAME || true
-
-                    echo "🚀 Running new container from image..."
-                    docker run -d --name $CONTAINER_NAME -p 80:80 $ECR_URI:$IMAGE_TAG
+                    echo "🚀 Running container from image: $ECR_URI:${IMAGE_TAG}"
+                    docker rm -f petmed || true
+                    docker run -d --name petmed -p 80:80 $ECR_URI:${IMAGE_TAG}
                 '''
             }
         }
@@ -52,7 +52,7 @@ pipeline {
             echo "❌ Failed to pull or run container!"
         }
         success {
-            echo "✅ Container is running from: $ECR_URI:$IMAGE_TAG"
+            echo "✅ Successfully deployed: $ECR_URI:${IMAGE_TAG}"
         }
     }
 }
