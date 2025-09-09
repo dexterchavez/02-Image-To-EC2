@@ -12,7 +12,7 @@ pipeline {
         REMOTE_USER             = "ubuntu"
         SSH_CREDENTIALS_ID      = "ubuntu-mrdexterchavez"
         ECR_URI                 = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
-        IMAGE_TAG               = "${BUILD_NUMBER}"
+        IMAGE_TAG               = "${BUILD_NUMBER}"   // use Jenkins build number for versioning
     }
 
     stages {
@@ -29,13 +29,12 @@ pipeline {
             steps {
                 script {
                     echo "🐳 Building and pushing Docker image to ECR..."
-
                     sh '''
                         # Authenticate with ECR
                         aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_URI}
 
-                        # Build Docker image (force amd64 for EC2 compatibility)
-                        docker buildx build --platform linux/amd64 -t ${ECR_URI}:${IMAGE_TAG} -t ${ECR_URI}:latest .
+                        # Build Docker image (no buildx, since Jenkins Docker doesn't support it)
+                        docker build -t ${ECR_URI}:${IMAGE_TAG} -t ${ECR_URI}:latest .
 
                         # Push both tags
                         docker push ${ECR_URI}:${IMAGE_TAG}
@@ -52,9 +51,9 @@ pipeline {
                     writeFile file: 'deploy.sh', text: """#!/bin/bash
 echo "✅ Running deploy script on EC2..."
 
-# Install Docker if missing
+# Install Docker the official way
 sudo apt-get update -y
-sudo apt-get install -y ca-certificates curl gnupg lsb-release
+sudo apt-get install -y ca-certificates curl gnupg lsb-release awscli
 
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -70,15 +69,11 @@ sudo systemctl start docker
 # Authenticate with ECR
 aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | sudo docker login --username AWS --password-stdin ${ECR_URI}
 
-# Pull build-specific tag
-sudo docker pull ${ECR_URI}:${IMAGE_TAG}
-
-# Stop & remove old container
+# Pull latest image and run container
+sudo docker pull ${ECR_URI}:latest
 sudo docker stop petmed || true
 sudo docker rm petmed || true
-
-# Run new container
-sudo docker run -d --name petmed -p 80:80 ${ECR_URI}:${IMAGE_TAG}
+sudo docker run -d --name petmed -p 80:80 ${ECR_URI}:latest
 """
                 }
             }
