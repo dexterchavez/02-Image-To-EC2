@@ -9,8 +9,8 @@ pipeline {
         GITHUB_REPO        = "https://github.com/dexterchavez/02-Image-To-EC2.git"
         REMOTE_USER        = "ubuntu"
         SSH_CREDENTIALS_ID = "ubuntu-mrdexterchavez"
-        IMAGE_TAG          = "${env.BUILD_NUMBER}"   // use Jenkins build number
         ECR_URI            = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
+        IMAGE_TAG          = "${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -27,42 +27,37 @@ pipeline {
             steps {
                 script {
                     echo "📝 Creating deploy.sh file..."
-                    writeFile file: 'deploy.sh', text: '''#!/bin/bash
+                    writeFile file: 'deploy.sh', text: """#!/bin/bash
 echo "✅ Running deploy script on EC2..."
 
-# Install dependencies
+# Install Docker
 sudo apt-get update -y
-sudo apt-get install -y unzip curl
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
 
-# Install AWS CLI v2
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip -o awscliv2.zip
-sudo ./aws/install --update
-
-# Install Docker if not already installed
-sudo apt-get install -y ca-certificates gnupg lsb-release
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+echo "deb [arch=\\\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \\\$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
 sudo apt-get update -y
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 sudo systemctl enable docker
 sudo systemctl start docker
 
-# Authenticate Docker with ECR
+# Authenticate with ECR
 aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | sudo docker login --username AWS --password-stdin ${ECR_URI}
 
-# Pull the specific build tag
+# Pull image with correct tag
 sudo docker pull ${ECR_URI}:${IMAGE_TAG}
 
 # Stop and remove old container if running
 sudo docker stop petmed || true
 sudo docker rm petmed || true
 
-# Run the new container
+# Run new container
 sudo docker run -d --name petmed -p 80:80 ${ECR_URI}:${IMAGE_TAG}
-'''
+"""
                 }
             }
         }
