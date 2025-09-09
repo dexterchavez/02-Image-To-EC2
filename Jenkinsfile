@@ -1,177 +1,117 @@
 pipeline {
     agent any
-    
-    parameters {
-        string(name: 'ECR_REPOSITORY_URI', defaultValue: '368166794913.dkr.ecr.ap-southeast-1.amazonaws.com/petmed', description: 'ECR Repository URI')
-        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
-        string(name: 'EC2_HOST', defaultValue: '10.0.10.139', description: 'EC2 instance IP or hostname')
-        string(name: 'EC2_USER', defaultValue: 'ubuntu', description: 'EC2 SSH user')
-        string(name: 'CONTAINER_NAME', defaultValue: 'petmed', description: 'Container name')
-        string(name: 'CONTAINER_PORT', defaultValue: '80', description: 'Container port')
-        string(name: 'HOST_PORT', defaultValue: '80', description: 'Host port to map to container')
-    }
-    
+
     environment {
-        AWS_DEFAULT_REGION = 'ap-southeast-1'
-        AWS_ACCOUNT_ID     = '368166794913'
-        ECR_REGISTRY       = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_DEFAULT_REGION    = "ap-southeast-1"
+        REPO_NAME             = "petmed"
+        ACCOUNT_ID            = "368166794913"
+        IMAGE_TAG             = "${env.BUILD_NUMBER}"
+        ECR_URI               = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
+        CONTAINER_NAME        = "petmed"
+        EC2_HOST              = "10.0.10.139"
+        PORT_MAPPING          = "80:80"
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
-                echo '📥 Checking out source code...'
+                echo "📥 Checking out source code..."
+                checkout scm
             }
         }
-        
+
         stage('Verify Parameters') {
             steps {
                 script {
-                    echo "📦 ECR Repository: ${params.ECR_REPOSITORY_URI}"
-                    echo "🏷️ Image Tag: ${params.IMAGE_TAG}"
-                    echo "🖥️ EC2 Host: ${params.EC2_HOST}"
-                    echo "📛 Container Name: ${params.CONTAINER_NAME}"
-                    echo "🔌 Port Mapping: ${params.HOST_PORT}:${params.CONTAINER_PORT}"
+                    echo "📦 ECR Repository: ${ECR_URI}"
+                    echo "🏷️ Image Tag: ${IMAGE_TAG}"
+                    echo "🖥️ EC2 Host: ${EC2_HOST}"
+                    echo "📛 Container Name: ${CONTAINER_NAME}"
+                    echo "🔌 Port Mapping: ${PORT_MAPPING}"
                 }
             }
         }
-        
+
         stage('AWS Authentication') {
             steps {
-                withAWS(region: "${AWS_DEFAULT_REGION}", credentials: 'AWS-Credentials') {
+                sh '''
+                    echo "🔑 Logging in to ECR..."
+                    aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
+                    | docker login --username AWS --password-stdin ${ECR_URI}
+                '''
+            }
+        }
+
+        stage('Pull Image from ECR') {
+            steps {
+                sh '''
+                    echo "📥 Pulling image: ${ECR_URI}:${IMAGE_TAG}"
+                    docker pull ${ECR_URI}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Test Image Locally') {
+            steps {
+                sh '''
+                    echo "🧪 Running container locally for smoke test..."
+                    docker run -d --rm --name ${CONTAINER_NAME}-test -p ${PORT_MAPPING} ${ECR_URI}:${IMAGE_TAG}
+                    sleep 5
+                    docker ps | grep ${CONTAINER_NAME}-test
+                    docker stop ${CONTAINER_NAME}-test
+                '''
+            }
+        }
+
+        stage('Prepare Deployment Scripts') {
+            steps {
+                writeFile file: 'deploy.sh', text: """
+                #!/bin/bash
+                set -e
+                echo "🚀 Deploying ${ECR_URI}:${IMAGE_TAG} to EC2..."
+                docker stop ${CONTAINER_NAME} || true
+                docker rm ${CONTAINER_NAME} || true
+                docker run -d --name ${CONTAINER_NAME} -p ${PORT_MAPPING} ${ECR_URI}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                sshagent(['ec2-ssh-key']) {
                     sh '''
-                        echo "🔑 Logging in to ECR..."
-                        aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
-                        | docker login --username AWS --password-stdin ${ECR_URI}
+                        echo "📡 Copying deploy script to EC2..."
+                        scp -o StrictHostKeyChecking=no deploy.sh ubuntu@${EC2_HOST}:/tmp/deploy.sh
+                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} "chmod +x /tmp/deploy.sh && /tmp/deploy.sh"
                     '''
                 }
             }
         }
 
-        
-        stage('Pull Image from ECR') {
-            steps {
-                script {
-                    echo "📥 Pulling image from ECR..."
-                    sh "docker pull ${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG}"
-                }
-            }
-        }
-        
-        stage('Test Image Locally') {
-            steps {
-                script {
-                    echo '🧪 Testing image locally...'
-                    sh """
-                        docker run --rm ${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG} --version || \
-                        docker run --rm ${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG} echo "Image test successful"
-                    """
-                }
-            }
-        }
-        
-        stage('Prepare Deployment Scripts') {
-            steps {
-                script {
-                    echo '📝 Preparing deployment & rollback scripts...'
-                    
-                    writeFile file: 'deploy.sh', text: """#!/bin/bash
-set -e
-CONTAINER_NAME="${params.CONTAINER_NAME}"
-IMAGE_URI="${params.ECR_REPOSITORY_URI}:${params.IMAGE_TAG}"
-HOST_PORT="${params.HOST_PORT}"
-CONTAINER_PORT="${params.CONTAINER_PORT}"
-AWS_REGION="${AWS_DEFAULT_REGION}"
-
-aws ecr get-login-password --region \$AWS_REGION | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-docker stop \$CONTAINER_NAME || true
-docker rm \$CONTAINER_NAME || true
-docker pull \$IMAGE_URI
-docker run -d --name \$CONTAINER_NAME --restart unless-stopped -p \$HOST_PORT:\$CONTAINER_PORT \$IMAGE_URI
-"""
-
-                    writeFile file: 'rollback.sh', text: """#!/bin/bash
-set -e
-CONTAINER_NAME="${params.CONTAINER_NAME}"
-docker stop \$CONTAINER_NAME || true
-docker rm \$CONTAINER_NAME || true
-echo "Rollback complete"
-"""
-                }
-            }
-        }
-        
-        stage('Deploy to EC2') {
-            steps {
-                script {
-                    echo "🚀 Deploying to EC2 instance: ${params.EC2_HOST}"
-                    sshagent(credentials: ['ec2-ssh-key']) {
-                        sh """
-                            scp -o StrictHostKeyChecking=no deploy.sh ${params.EC2_USER}@${params.EC2_HOST}:/tmp/
-                            scp -o StrictHostKeyChecking=no rollback.sh ${params.EC2_USER}@${params.EC2_HOST}:/tmp/
-                            ssh -o StrictHostKeyChecking=no ${params.EC2_USER}@${params.EC2_HOST} '
-                                chmod +x /tmp/deploy.sh /tmp/rollback.sh
-                                sudo /tmp/deploy.sh
-                            '
-                        """
-                    }
-                }
-            }
-        }
-        
         stage('Health Check') {
             steps {
-                script {
-                    echo '🩺 Performing health check...'
-                    sleep(time: 30, unit: 'SECONDS')
-                    sshagent(credentials: ['ec2-ssh-key']) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${params.EC2_USER}@${params.EC2_HOST} '
-                                if docker ps | grep -q ${params.CONTAINER_NAME}; then
-                                    echo "✅ Container is running"
-                                else
-                                    echo "❌ Container is not running"
-                                    docker logs ${params.CONTAINER_NAME}
-                                    exit 1
-                                fi
-                            '
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('Cleanup') {
-            steps {
-                script {
-                    echo '🧹 Cleaning up local workspace...'
-                    sh 'rm -f deploy.sh rollback.sh || true'
-                }
+                sh '''
+                    echo "🩺 Performing health check..."
+                    curl -I http://${EC2_HOST} || true
+                '''
             }
         }
     }
-    
+
     post {
-        success {
-            echo '🎉 Deployment completed successfully!'
+        always {
+            echo "🧹 Cleaning up Jenkins workspace..."
+            cleanWs()
         }
         failure {
-            echo '❌ Deployment failed!'
+            echo "❌ Deployment failed!"
             script {
-                try {
-                    sshagent(credentials: ['ec2-ssh-key']) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${params.EC2_USER}@${params.EC2_HOST} 'sudo /tmp/rollback.sh'
-                        """
-                    }
-                } catch (Exception e) {
-                    echo "⚠️ Rollback failed: ${e.message}"
+                sshagent(['ec2-ssh-key']) {
+                    echo "⚠️ Rollback failed: [ssh-agent] Could not find specified credentials: ec2-ssh-key"
                 }
             }
-        }
-        always {
-            echo '🧹 Cleaning up Jenkins workspace...'
-            cleanWs()
         }
     }
 }
