@@ -5,19 +5,12 @@ pipeline {
         AWS_DEFAULT_REGION = "ap-southeast-1"
         REPO_NAME   = "petmed"
         ACCOUNT_ID  = "368166794913"
-        IMAGE_TAG   = "${BUILD_NUMBER}"
+        IMAGE_TAG   = "${BUILD_NUMBER}"   // Or set to "latest" if you prefer
         ECR_URI     = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
+        CONTAINER_NAME = "petmed-container"
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'main',
-                    url: 'https://github.com/dexterchavez/petmed.git',
-                    credentialsId: 'PAT-Security-Tokens'
-            }
-        }
-
         stage('Login to AWS ECR') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
@@ -32,32 +25,34 @@ pipeline {
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Pull Image from ECR') {
             steps {
                 sh '''
-                    echo "🔨 Building Docker image with tag: $IMAGE_TAG"
-                    docker build --platform linux/amd64 -t $REPO_NAME:$IMAGE_TAG .
-                    
-                    echo "🏷️ Tagging image for ECR"
-                    docker tag $REPO_NAME:$IMAGE_TAG $ECR_URI:$IMAGE_TAG
-                    
-                    echo "📤 Pushing image to ECR"
-                    docker push $ECR_URI:$IMAGE_TAG
+                    echo "📥 Pulling image $ECR_URI:$IMAGE_TAG ..."
+                    docker pull $ECR_URI:$IMAGE_TAG
+                '''
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                sh '''
+                    echo "🛑 Stopping old container (if exists)..."
+                    docker rm -f $CONTAINER_NAME || true
+
+                    echo "🚀 Running new container from image..."
+                    docker run -d --name $CONTAINER_NAME -p 80:80 $ECR_URI:$IMAGE_TAG
                 '''
             }
         }
     }
 
     post {
-        always {
-            echo "🧹 Cleaning up..."
-            sh 'docker system prune -f || true'
-        }
         failure {
-            echo "❌ Build or push failed!"
+            echo "❌ Failed to pull or run container!"
         }
         success {
-            echo "✅ Image pushed successfully: $ECR_URI:$IMAGE_TAG"
+            echo "✅ Container is running from: $ECR_URI:$IMAGE_TAG"
         }
     }
 }
