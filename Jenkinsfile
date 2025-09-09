@@ -80,7 +80,7 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(['ec2-ssh-key']) {
+                sshagent(['ubuntu-mrdexterchavez']) {
                     sh '''
                         echo "📡 Copying deploy script to EC2..."
                         scp -o StrictHostKeyChecking=no deploy.sh ubuntu@${EC2_HOST}:/tmp/deploy.sh
@@ -108,8 +108,8 @@ pipeline {
         failure {
             echo "❌ Deployment failed!"
             script {
-                sshagent(['ec2-ssh-key']) {
-                    echo "⚠️ Rollback failed: [ssh-agent] Could not find specified credentials: ec2-ssh-key"
+                sshagent(['ubuntu-mrdexterchavez']) {
+                    echo "⚠️ Rollback failed: [ssh-agent] Could not find specified credentials: ubuntu-mrdexterchavez"
                 }
             }
         }
