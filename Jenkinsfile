@@ -24,7 +24,7 @@ pipeline {
         
         stage('deploy to EC2') {
             steps {
-                sshagent(['ubuntu (ubuntu-mrdexterchavez)']) {
+                sshagent(['ubuntu-mrdexterchavez']) {
                     sh '''
                         echo "🚀 Deploying app to EC2..."
 
