@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    parameters {
-        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'ECR Image Tag to deploy')
-    }
-
     environment {
         AWS_DEFAULT_REGION = "ap-southeast-1"
         REPO_NAME   = "petmed"
@@ -23,6 +19,25 @@ pipeline {
                         aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
                           docker login --username AWS --password-stdin $ECR_URI
                     '''
+                }
+            }
+        }
+
+        stage('Get Latest Image Tag') {
+            steps {
+                script {
+                    def latestTag = sh(
+                        script: """
+                            aws ecr describe-images \
+                              --repository-name $REPO_NAME \
+                              --region $AWS_DEFAULT_REGION \
+                              --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
+                              --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    echo "📌 Latest image tag found: ${latestTag}"
+                    env.IMAGE_TAG = latestTag
                 }
             }
         }
