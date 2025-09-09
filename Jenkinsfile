@@ -27,17 +27,19 @@ pipeline {
             steps {
                 script {
                     echo "📝 Creating deploy.sh file..."
-                    writeFile file: 'deploy.sh', text: '''#!/bin/bash
+                    writeFile file: 'deploy.sh', text: """#!/bin/bash
 echo "✅ Running deploy script on EC2..."
 
-# Install Docker the official way
+# Install Docker if not installed
 sudo apt-get update -y
-sudo apt-get install -y ca-certificates curl gnupg lsb-release
+sudo apt-get install -y ca-certificates curl gnupg lsb-release unzip
 
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+cat <<EOF | sudo tee /etc/apt/sources.list.d/docker.list
+deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable
+EOF
 
 sudo apt-get update -y
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -45,24 +47,24 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plug
 sudo systemctl enable docker
 sudo systemctl start docker
 
-# Install AWS CLI v2 if not installed
+# Install AWS CLI v2 if missing
 if ! command -v aws &> /dev/null
 then
     echo "Installing AWS CLI v2..."
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip awscliv2.zip
+    unzip -o awscliv2.zip
     sudo ./aws/install
 fi
 
 # Authenticate with ECR
 aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | sudo docker login --username AWS --password-stdin ${ECR_URI}
 
-# Pull latest image and run container
-sudo docker pull ${ECR_URI}:${IMAGE_TAG}
-sudo docker stop petmed || true
-sudo docker rm petmed || true
-sudo docker run -d --name petmed -p 80:80 ${ECR_URI}:${IMAGE_TAG}
-'''
+# Pull image and run container
+sudo docker pull ${ECR_URI}:${IMAGE_TAG} || sudo docker pull ${ECR_URI}:latest
+sudo docker stop ${REPO_NAME} || true
+sudo docker rm ${REPO_NAME} || true
+sudo docker run -d --name ${REPO_NAME} -p 80:80 ${ECR_URI}:${IMAGE_TAG}
+"""
                 }
             }
         }
