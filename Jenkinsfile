@@ -33,7 +33,7 @@ pipeline {
 
                             echo "🚀 Running container..."
                             docker rm -f petmed || true
-                            docker run -d --name petmed -p 80:80 $ECR_URI:\$IMAGE_TAG
+                            docker run -d --name petmed -p 80:8080 $ECR_URI:\$IMAGE_TAG
                         '
                     """
                 }
