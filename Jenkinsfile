@@ -12,7 +12,7 @@ pipeline {
     stages {
         stage('Deploy to EC2') {
             steps {
-                sshagent(['EC2-SSH-Key']) { // 🔑 Jenkins credential for EC2 PEM key
+                sshagent(['ubuntu-mrdexterchavez']) { // 🔑 Jenkins credential for EC2 PEM key
                     sh """
                         ssh -o StrictHostKeyChecking=no $EC2_HOST '
                             echo "🔑 Logging in to AWS ECR..."
