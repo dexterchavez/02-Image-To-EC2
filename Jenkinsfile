@@ -9,7 +9,7 @@ pipeline {
         REMOTE_USER        = "ubuntu"
         SSH_CREDENTIALS_ID = "ubuntu-mrdexterchavez"
         ECR_URI            = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
-        IMAGE_TAG          = "latest"  // or a specific tag (e.g., "24")
+        IMAGE_TAG          = "${BUILD_NUMBER}"
     }
 
     stages {
