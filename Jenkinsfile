@@ -10,7 +10,7 @@ pipeline {
         IMAGE_TAG             = "latest"
         ECR_URI               = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
         CONTAINER_NAME        = "petmed"
-        EC2_HOST              = "10.0.10.139"
+        EC2_HOST              = "13.212.211.203"
         PORT_MAPPING          = "80:80"
     }
 
