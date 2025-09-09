@@ -25,19 +25,22 @@ pipeline {
 
         stage('Get Latest Image Tag') {
             steps {
-                script {
-                    def latestTag = sh(
-                        script: """
-                            aws ecr describe-images \
-                              --repository-name $REPO_NAME \
-                              --region $AWS_DEFAULT_REGION \
-                              --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
-                              --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    echo "📌 Latest image tag found: ${latestTag}"
-                    env.IMAGE_TAG = latestTag
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                                  credentialsId: 'AWS-Credentials']]) {
+                    script {
+                        def latestTag = sh(
+                            script: """
+                                aws ecr describe-images \
+                                  --repository-name $REPO_NAME \
+                                  --region $AWS_DEFAULT_REGION \
+                                  --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
+                                  --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        echo "📌 Latest image tag found: ${latestTag}"
+                        env.IMAGE_TAG = latestTag
+                    }
                 }
             }
         }
