@@ -71,12 +71,24 @@ pipeline {
                 #!/bin/bash
                 set -e
                 echo "🚀 Deploying ${ECR_URI}:${IMAGE_TAG} to EC2..."
+
+                # Login to ECR from inside EC2
+                aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \\
+                | docker login --username AWS --password-stdin ${ECR_URI}
+
+                # Stop and remove old container (if exists)
                 docker stop ${CONTAINER_NAME} || true
                 docker rm ${CONTAINER_NAME} || true
+
+                # Pull the latest image from ECR
+                docker pull ${ECR_URI}:${IMAGE_TAG}
+
+                # Run the container
                 docker run -d --name ${CONTAINER_NAME} -p ${PORT_MAPPING} ${ECR_URI}:${IMAGE_TAG}
                 """
             }
         }
+
 
         stage('Deploy to EC2') {
             steps {
