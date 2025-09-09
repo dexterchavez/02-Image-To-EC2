@@ -38,15 +38,16 @@ pipeline {
         
         stage('AWS Authentication') {
             steps {
-                script {
-                    echo '🔑 Authenticating with AWS ECR...'
-                    sh """
+                withAWS(region: "${AWS_DEFAULT_REGION}", credentials: 'AWS-Credentials') {
+                    sh '''
+                        echo "🔑 Logging in to ECR..."
                         aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
-                        | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-                    """
+                        | docker login --username AWS --password-stdin ${ECR_URI}
+                    '''
                 }
             }
         }
+
         
         stage('Pull Image from ECR') {
             steps {
