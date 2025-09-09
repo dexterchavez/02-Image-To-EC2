@@ -22,17 +22,22 @@ pipeline {
             }
         }
         
-        stage ('deploy to EC2') {
+        stage('deploy to EC2') {
             steps {
-                script {
-                    echo "deploying to shell-script to ec2"
-                    def shellCmd = "bash ./php.sh"
-                    sshagent ([SSH_CREDENTIALS_ID]) {
-                        sh "scp -o StrictHostKeyChecking=no php.sh ${REMOTE_USER}@${EC2_IP}:/home/ubuntu"
-                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${EC2_IP} ${shellCmd}"
-                    }
+                sshagent(['ec2-user (mrdexterchavez)']) {
+                    sh '''
+                        echo "🚀 Deploying app to EC2..."
+
+                        # Instead of php.sh, either:
+                        # - copy deploy.sh (if you’re using Docker deployment)
+                        # - or run inline commands directly
+
+                        scp -o StrictHostKeyChecking=no deploy.sh ubuntu@${EC2_HOST}:/home/ubuntu
+                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} "chmod +x /home/ubuntu/deploy.sh && /home/ubuntu/deploy.sh"
+                    '''
                 }
             }
         }
+
     }
 }
