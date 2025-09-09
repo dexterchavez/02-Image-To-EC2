@@ -10,7 +10,7 @@ pipeline {
         REMOTE_USER        = "ubuntu"
         SSH_CREDENTIALS_ID = "ubuntu-mrdexterchavez"
         ECR_URI            = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
-        IMAGE_TAG          = "${env.BUILD_NUMBER}"
+        IMAGE_TAG          = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -19,6 +19,22 @@ pipeline {
                 script {
                     echo "📥 Pulling source code from GitHub..."
                     git branch: 'main', url: "${GITHUB_REPO}"
+                }
+            }
+        }
+
+        stage('build and push docker image') {
+            steps {
+                script {
+                    echo "🐳 Building Docker image..."
+                    sh """
+                        aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
+                          | docker login --username AWS --password-stdin ${ECR_URI}
+                        
+                        docker build -t ${REPO_NAME}:${IMAGE_TAG} .
+                        docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
+                        docker push ${ECR_URI}:${IMAGE_TAG}
+                    """
                 }
             }
         }
@@ -37,7 +53,7 @@ sudo apt-get install -y ca-certificates curl gnupg lsb-release
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-echo "deb [arch=\\\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \\\$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+echo "deb [arch=\\\\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \\\\$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt-get update -y
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -48,14 +64,10 @@ sudo systemctl start docker
 # Authenticate with ECR
 aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | sudo docker login --username AWS --password-stdin ${ECR_URI}
 
-# Pull image with correct tag
+# Pull latest image and run container
 sudo docker pull ${ECR_URI}:${IMAGE_TAG}
-
-# Stop and remove old container if running
 sudo docker stop petmed || true
 sudo docker rm petmed || true
-
-# Run new container
 sudo docker run -d --name petmed -p 80:80 ${ECR_URI}:${IMAGE_TAG}
 """
                 }
