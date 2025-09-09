@@ -2,15 +2,17 @@ pipeline {
     agent any
 
     environment {
-        ACCOUNT_ID         = "368166794913"
-        AWS_DEFAULT_REGION = "ap-southeast-1"
-        REPO_NAME          = "petmed"
-        EC2_IP             = "13.212.2.119"
-        GITHUB_REPO        = "https://github.com/dexterchavez/02-Image-To-EC2.git"
-        REMOTE_USER        = "ubuntu"
-        SSH_CREDENTIALS_ID = "ubuntu-mrdexterchavez"
-        ECR_URI            = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
-        IMAGE_TAG          = "${BUILD_NUMBER}"
+        AWS_ACCESS_KEY_ID       = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY   = credentials('AWS_SECRET_ACCESS_KEY')
+        ACCOUNT_ID              = "368166794913"
+        AWS_DEFAULT_REGION      = "ap-southeast-1"
+        REPO_NAME               = "petmed"
+        EC2_IP                  = "13.212.2.119"
+        GITHUB_REPO             = "https://github.com/dexterchavez/02-Image-To-EC2.git"
+        REMOTE_USER             = "ubuntu"
+        SSH_CREDENTIALS_ID      = "ubuntu-mrdexterchavez"
+        ECR_URI                 = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
+        IMAGE_TAG               = "${BUILD_NUMBER}"
     }
 
     stages {
