@@ -7,7 +7,7 @@ pipeline {
         AWS_DEFAULT_REGION    = "ap-southeast-1"
         REPO_NAME             = "petmed"
         ACCOUNT_ID            = "368166794913"
-        IMAGE_TAG             = "${env.BUILD_NUMBER}"
+        IMAGE_TAG             = "latest"
         ECR_URI               = "${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${REPO_NAME}"
         CONTAINER_NAME        = "petmed"
         EC2_HOST              = "10.0.10.139"
