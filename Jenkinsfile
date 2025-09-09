@@ -22,6 +22,22 @@ pipeline {
             }
         }
         
+        stage('prepare deploy script') {
+            steps {
+                sh '''
+                    echo "📝 Creating deploy.sh file..."
+                    cat > deploy.sh <<'EOF'
+                    #!/bin/bash
+                    echo "✅ Running deploy script on EC2..."
+                    sudo apt-get update -y
+                    sudo apt-get install -y docker.io
+                    # add more steps here if needed
+                    EOF
+                    chmod +x deploy.sh
+                '''
+            }
+        }
+
         stage('deploy to EC2') {
             steps {
                 sshagent(['ubuntu-mrdexterchavez']) {
