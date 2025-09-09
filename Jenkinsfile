@@ -32,8 +32,8 @@ pipeline {
                         # - copy deploy.sh (if you’re using Docker deployment)
                         # - or run inline commands directly
 
-                        scp -o StrictHostKeyChecking=no deploy.sh ubuntu@${EC2_HOST}:/home/ubuntu
-                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} "chmod +x /home/ubuntu/deploy.sh && /home/ubuntu/deploy.sh"
+                        scp -o StrictHostKeyChecking=no deploy.sh ubuntu@${EC2_IP}:/home/ubuntu
+                        ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "chmod +x /home/ubuntu/deploy.sh && /home/ubuntu/deploy.sh"
                     '''
                 }
             }
